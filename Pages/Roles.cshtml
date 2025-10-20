@@ -1,0 +1,97 @@
+﻿@page
+@model SimpleAuthLog.Pages.RolesModel
+@{
+    ViewData["Title"] = "角色管理";
+}
+
+<h1>@ViewData["Title"]</h1>
+
+<div class="row">
+    <div class="col-md-4">
+        <section>
+            <h4>新增角色</h4>
+            <hr />
+            <form method="post" asp-page-handler="Create">
+                <div class="form-floating mb-3">
+                    <input asp-for="NewRole.RoleName" class="form-control" />
+                    <label asp-for="NewRole.RoleName">角色名稱</label>
+                </div>
+                <button type="submit" class="w-100 btn btn-lg btn-success">新增角色</button>
+            </form>
+        </section>
+    </div>
+    <div class="col-md-8">
+        <h4>現有角色列表</h4>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>角色名稱</th>
+                    <th style="width: 20%;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var role in Model.RoleList)
+                {
+                    <tr>
+                        <td>@role.Id</td>
+                        <td>@role.RoleName</td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editRoleModal"
+                                    data-roleid="@role.Id" data-rolename="@role.RoleName">
+                                編輯
+                            </button>
+                            <form method="post" asp-page-handler="Delete" asp-route-id="@role.Id" style="display:inline;" onsubmit="return confirm('您確定要刪除這個角色嗎？');">
+                                <button type="submit" class="btn btn-sm btn-danger">刪除</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+<div class="modal fade" id="editRoleModal" tabindex="-1" aria-labelledby="editRoleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" asp-page-handler="Update">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editRoleModalLabel">編輯角色</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" asp-for="EditRoleId" id="edit-roleid" />
+                    <div class="mb-3">
+                        <label asp-for="EditRole.RoleName" class="form-label">新角色名稱</label>
+                        <input asp-for="EditRole.RoleName" class="form-control" id="edit-rolename" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">儲存變更</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        var editRoleModal = document.getElementById('editRoleModal');
+        editRoleModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+            var roleId = button.getAttribute('data-roleid');
+            var roleName = button.getAttribute('data-rolename');
+
+            var modalTitle = editRoleModal.querySelector('.modal-title');
+            var roleIdInput = editRoleModal.querySelector('#edit-roleid');
+            var roleNameInput = editRoleModal.querySelector('#edit-rolename');
+
+            modalTitle.textContent = '編輯角色: ' + roleName + ' (ID: ' + roleId + ')';
+            roleIdInput.value = roleId;
+            roleNameInput.value = roleName;
+        });
+    </script>
+}

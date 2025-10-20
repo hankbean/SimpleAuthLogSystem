@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using SimpleAuthLog.Data;
 using SimpleAuthLog.Models;
+using SimpleAuthLog.DTOs;
 
 namespace SimpleAuthLog.Controllers
 {
@@ -119,8 +120,5 @@ namespace SimpleAuthLog.Controllers
         }
     }
 
-    public class RoleDto
-    {
-        public required string RoleName { get; set; }
-    }
+  
 }

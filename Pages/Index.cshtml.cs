@@ -4,8 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using SimpleAuthLog.Controllers;
 using SimpleAuthLog.Data;
 using SimpleAuthLog.Models;
-using System.Text; // For StringContent
-using System.Text.Json; // For JsonSerializer
+using System.Text; 
+using System.Text.Json;
+using SimpleAuthLog.DTOs;
 
 namespace SimpleAuthLog.Pages
 {

@@ -4,6 +4,7 @@ using SimpleAuthLog.Data;
 using SimpleAuthLog.Models;
 using System.Security.Cryptography;
 using System.Text;
+using SimpleAuthLog.DTOs;
 
 namespace SimpleAuthLog.Controllers
 {
@@ -140,15 +141,4 @@ namespace SimpleAuthLog.Controllers
         }
     }
 
-    public class UserDto
-    {
-        public required string Username { get; set; }
-        public required string Password { get; set; }
-    }
-
-    public class UserUpdateDto
-    {
-        public string? Username { get; set; }
-        public string? Password { get; set; }
-    }
 }

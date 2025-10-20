@@ -6,14 +6,14 @@
 
 <h1>@ViewData["Title"]</h1>
 
-<p>以下是目前系統中所有的使用者。</p>
+<p>以下是目前系統中所有的使用者。您可以進行編輯或刪除操作。</p>
 
 <table class="table table-striped">
     <thead>
         <tr>
-            <th>使用者 ID</th>
+            <th>ID</th>
             <th>使用者名稱</th>
-            <th>密碼雜湊值 (Password Hash)</th>
+            <th style="width: 20%;">操作</th>
         </tr>
     </thead>
     <tbody>
@@ -22,8 +22,66 @@
             <tr>
                 <td>@user.Id</td>
                 <td>@user.Username</td>
-                <td>@user.PasswordHash</td>
+                <td>
+                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editUserModal"
+                            data-userid="@user.Id" data-username="@user.Username">
+                        編輯
+                    </button>
+
+                    <form method="post" asp-page-handler="Delete" asp-route-id="@user.Id" style="display:inline;" onsubmit="return confirm('您確定要刪除這位使用者嗎？');">
+                        <button type="submit" class="btn btn-sm btn-danger">刪除</button>
+                    </form>
+                </td>
             </tr>
         }
     </tbody>
 </table>
+
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" asp-page-handler="Update">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editUserModalLabel">編輯使用者</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" asp-for="EditUserId" id="edit-userid" />
+
+                    <div class="mb-3">
+                        <label asp-for="EditUser.Username" class="form-label">新使用者名稱</label>
+                        <input asp-for="EditUser.Username" class="form-control" id="edit-username" />
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="EditUser.Password" class="form-label">新密碼 (留白表示不更改)</label>
+                        <input asp-for="EditUser.Password" type="password" class="form-control" placeholder="留白表示不更改" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">儲存變更</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        var editUserModal = document.getElementById('editUserModal');
+        editUserModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+
+            var userId = button.getAttribute('data-userid');
+            var username = button.getAttribute('data-username');
+
+            var modalTitle = editUserModal.querySelector('.modal-title');
+            var userIdInput = editUserModal.querySelector('#edit-userid');
+            var usernameInput = editUserModal.querySelector('#edit-username');
+
+            modalTitle.textContent = '編輯使用者: ' + username + ' (ID: ' + userId + ')';
+            userIdInput.value = userId;
+            usernameInput.value = username;
+        });
+    </script>
+}
