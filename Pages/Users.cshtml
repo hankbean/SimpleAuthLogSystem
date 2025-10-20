@@ -1,0 +1,29 @@
+﻿@page
+@model SimpleAuthLog.Pages.UsersModel
+@{
+    ViewData["Title"] = "使用者列表";
+}
+
+<h1>@ViewData["Title"]</h1>
+
+<p>以下是目前系統中所有的使用者。</p>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>使用者 ID</th>
+            <th>使用者名稱</th>
+            <th>密碼雜湊值 (Password Hash)</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var user in Model.UserList)
+        {
+            <tr>
+                <td>@user.Id</td>
+                <td>@user.Username</td>
+                <td>@user.PasswordHash</td>
+            </tr>
+        }
+    </tbody>
+</table>

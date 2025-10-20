@@ -2,8 +2,8 @@
 using Microsoft.EntityFrameworkCore;
 using SimpleAuthLog.Data;
 using SimpleAuthLog.Models;
-using System.Security.Cryptography; // 用於密碼雜湊
-using System.Text; // 用於密碼雜湊
+using System.Security.Cryptography;
+using System.Text;
 
 namespace SimpleAuthLog.Controllers
 {
@@ -18,18 +18,28 @@ namespace SimpleAuthLog.Controllers
             _context = context;
         }
 
-        // GET: api/users - 查詢所有使用者
         [HttpGet]
         public async Task<ActionResult<IEnumerable<User>>> GetUsers()
         {
             return await _context.Users.ToListAsync();
         }
 
-        // POST: api/users - 新增使用者
+        [HttpGet("{id}")]
+        public async Task<ActionResult<User>> GetUser(int id)
+        {
+            var user = await _context.Users.FindAsync(id);
+
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            return user;
+        }
+
         [HttpPost]
         public async Task<ActionResult<User>> PostUser(UserDto userDto)
         {
-            // 1. 密碼雜湊處理
             var passwordHash = HashPassword(userDto.Password);
 
             var user = new User
@@ -38,22 +48,78 @@ namespace SimpleAuthLog.Controllers
                 PasswordHash = passwordHash
             };
 
-            // 2. 存入資料庫
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            // 3. 寫入 Audit Log
             await LogAction(user.Id, $"使用者 '{user.Username}' 已被建立");
 
-            // 使用 CreatedAtAction 回傳 201 Created 狀態碼，更符合 RESTful 風格
-            return CreatedAtAction(nameof(GetUsers), new { id = user.Id }, user);
+            return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
         }
 
-        // 密碼雜湊函式 (知識點)
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutUser(int id, UserUpdateDto userUpdateDto)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound($"找不到 ID 為 {id} 的使用者");
+            }
+
+            var oldUsername = user.Username;
+
+            if (!string.IsNullOrEmpty(userUpdateDto.Username))
+            {
+                user.Username = userUpdateDto.Username;
+            }
+
+            if (!string.IsNullOrEmpty(userUpdateDto.Password))
+            {
+                user.PasswordHash = HashPassword(userUpdateDto.Password);
+            }
+
+            _context.Entry(user).State = EntityState.Modified;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                await LogAction(id, $"使用者 '{oldUsername}' (ID: {id}) 的資料已被更新。新使用者名稱: '{user.Username}'");
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!_context.Users.Any(e => e.Id == id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            return NoContent();
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteUser(int id)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound($"找不到 ID 為 {id} 的使用者");
+            }
+
+            var deletedUsername = user.Username;
+
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+
+            await LogAction(0, $"使用者 '{deletedUsername}' (ID: {id}) 已被刪除");
+
+            return NoContent();
+        }
+
         private string HashPassword(string password)
         {
-            // 這是一個非常簡化的範例，真實世界請使用 BCrypt 或 Identity 框架
-            // 這裡沒有加鹽 (Salt)，僅為演示雜湊概念
             using (var sha256 = SHA256.Create())
             {
                 var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
@@ -61,24 +127,28 @@ namespace SimpleAuthLog.Controllers
             }
         }
 
-        // 日誌記錄共用函式 (知識點)
         private async Task LogAction(int userId, string action)
         {
             var auditLog = new AuditLog
             {
                 UserId = userId,
                 Action = action,
-                Timestamp = DateTime.UtcNow // 使用 UTC 時間是好習慣
+                Timestamp = DateTime.UtcNow
             };
             _context.AuditLogs.Add(auditLog);
             await _context.SaveChangesAsync();
         }
     }
 
-    // DTO (Data Transfer Object) - 用於接收來自前端的資料
     public class UserDto
     {
         public required string Username { get; set; }
         public required string Password { get; set; }
+    }
+
+    public class UserUpdateDto
+    {
+        public string? Username { get; set; }
+        public string? Password { get; set; }
     }
 }

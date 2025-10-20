@@ -14,7 +14,6 @@ namespace SimpleAuthLog.Data
         public DbSet<AuditLog> AuditLogs { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }
 
-        // 複寫此方法以設定 UserRole 的複合主鍵
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<UserRole>()
