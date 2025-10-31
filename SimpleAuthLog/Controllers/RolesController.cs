@@ -1,8 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimpleAuthLog.Data;
-using SimpleAuthLog.Models;
 using SimpleAuthLog.DTOs;
+using SimpleAuthLog.Models;
+using SimpleAuthLog.Services;
+using System.Security.Claims;
 
 namespace SimpleAuthLog.Controllers
 {
@@ -10,23 +13,26 @@ namespace SimpleAuthLog.Controllers
     [ApiController]
     public class RolesController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
+        private readonly RoleManager<IdentityRole<int>> _roleManager;
+        private readonly IAuditService _auditService;
 
-        public RolesController(ApplicationDbContext context)
+        public RolesController(RoleManager<IdentityRole<int>> roleManager, IAuditService auditService)
         {
-            _context = context;
+            _roleManager = roleManager;
+            _auditService = auditService;
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Role>>> GetRoles()
+        public async Task<ActionResult<IEnumerable<IdentityRole<int>>>> GetRoles()
         {
-            return await _context.Roles.ToListAsync();
+            var roles = await _roleManager.Roles.ToListAsync();
+            return Ok(roles);
         }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<Role>> GetRole(int id)
+        public async Task<ActionResult<IdentityRole<int>>> GetRole(int id)
         {
-            var role = await _context.Roles.FindAsync(id);
+            var role = await _roleManager.FindByIdAsync(id.ToString());
 
             if (role == null)
             {
@@ -37,86 +43,64 @@ namespace SimpleAuthLog.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<Role>> PostRole(RoleDto roleDto)
+        public async Task<ActionResult<IdentityRole<int>>> PostRole(RoleDto roleDto)
         {
-            var role = new Role
+            var role = new IdentityRole<int>
             {
-                RoleName = roleDto.RoleName
+                Name = roleDto.RoleName
             };
 
-            _context.Roles.Add(role);
-            await _context.SaveChangesAsync();
-
-            // 先暫時假設操作者是系統 (UserId = 0)，
-            // 在有登入機制後，這裡應傳入當前登入使用者的 ID。
-            await LogAction(0, $"角色 '{role.RoleName}' 已被建立");
-
-            return CreatedAtAction(nameof(GetRole), new { id = role.Id }, role);
-        }
-
-        private async Task LogAction(int userId, string action)
-        {
-            var auditLog = new AuditLog
+            var result = await _roleManager.CreateAsync(role);
+            if (result.Succeeded)
             {
-                UserId = userId,
-                Action = action,
-                Timestamp = DateTime.UtcNow
-            };
-            _context.AuditLogs.Add(auditLog);
-            await _context.SaveChangesAsync();
+                var adminUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                _auditService.LogAction(Convert.ToInt32(adminUserId), $"角色 '{role.Name}' 已被建立");
+                return CreatedAtAction(nameof(GetRole), "Roles", new { id = role.Id }, role);
+            }
+
+            return BadRequest(result.Errors);
         }
 
         [HttpPut("{id}")]
         public async Task<IActionResult> PutRole(int id, RoleDto roleDto)
         {
-            var role = await _context.Roles.FindAsync(id);
+            var role = await _roleManager.FindByIdAsync(id.ToString());
             if (role == null)
             {
                 return NotFound($"找不到 ID 為 {id} 的角色");
             }
 
-            var oldRoleName = role.RoleName;
-            role.RoleName = roleDto.RoleName;
+            var oldRoleName = role.Name;
+            role.Name = roleDto.RoleName;
 
-            _context.Entry(role).State = EntityState.Modified;
+            await _roleManager.UpdateAsync(role);
 
-            try
-            {
-                await _context.SaveChangesAsync();
-                await LogAction(0, $"角色 '{oldRoleName}' (ID: {id}) 已被更新為 '{role.RoleName}'");
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!_context.Roles.Any(e => e.Id == id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
+            var adminUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            _auditService.LogAction(Convert.ToInt32(adminUserId), $"角色 '{oldRoleName}' (ID: {id}) 已被更新為 '{role.Name}'");
             return NoContent();
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteRole(int id)
         {
-            var role = await _context.Roles.FindAsync(id);
+            var role = await _roleManager.FindByIdAsync(id.ToString());
             if (role == null)
             {
                 return NotFound($"找不到 ID 為 {id} 的角色");
             }
 
-            var deletedRoleName = role.RoleName;
+            var deletedRoleName = role.Name;
 
-            _context.Roles.Remove(role);
-            await _context.SaveChangesAsync();
+            var result = await _roleManager.DeleteAsync(role);
 
-            await LogAction(0, $"角色 '{deletedRoleName}' (ID: {id}) 已被刪除");
+            if (result.Succeeded)
+            {
+                var adminUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                _auditService.LogAction(Convert.ToInt32(adminUserId), $"角色 '{deletedRoleName}' (ID: {id}) 已被刪除");
+                return NoContent();
+            }
 
-            return NoContent();
+            return BadRequest(result.Errors);
         }
     }
 

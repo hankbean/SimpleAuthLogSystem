@@ -1,143 +1,148 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimpleAuthLog.Data;
+using SimpleAuthLog.DTOs;
 using SimpleAuthLog.Models;
+using SimpleAuthLog.Services;
 using System.Security.Cryptography;
 using System.Text;
-using SimpleAuthLog.DTOs;
+using System.Security.Claims;
 
 namespace SimpleAuthLog.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class UsersController : ControllerBase
     {
+        private readonly UserManager<IdentityUser<int>> _userManager;
+        private readonly RoleManager<IdentityRole<int>> _roleManager;
+        private readonly IAuditService _auditService;
         private readonly ApplicationDbContext _context;
 
-        public UsersController(ApplicationDbContext context)
+        public UsersController(
+            UserManager<IdentityUser<int>> userManager,
+            RoleManager<IdentityRole<int>> roleManager,
+            IAuditService auditService,
+            ApplicationDbContext context)
         {
+            _userManager = userManager;
+            _roleManager = roleManager;
+            _auditService = auditService;
             _context = context;
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<User>>> GetUsers()
+        public async Task<ActionResult<IEnumerable<IdentityUser<int>>>> GetUsers()
         {
-            return await _context.Users.ToListAsync();
+            var users = await _userManager.Users.ToListAsync();
+            return Ok(users);
         }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<User>> GetUser(int id)
+        public async Task<ActionResult<IdentityUser<int>>> GetUser(int id)
         {
-            var user = await _context.Users.FindAsync(id);
-
+            var user = await _userManager.FindByIdAsync(id.ToString());
             if (user == null)
             {
                 return NotFound();
             }
-
             return user;
         }
 
-        [HttpPost]
-        public async Task<ActionResult<User>> PostUser(UserDto userDto)
-        {
-            var passwordHash = HashPassword(userDto.Password);
-
-            var user = new User
-            {
-                Username = userDto.Username,
-                PasswordHash = passwordHash
-            };
-
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
-            await LogAction(user.Id, $"使用者 '{user.Username}' 已被建立");
-
-            return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
-        }
-
         [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> PutUser(int id, UserUpdateDto userUpdateDto)
         {
-            var user = await _context.Users.FindAsync(id);
+            var user = await _userManager.FindByIdAsync(id.ToString());
             if (user == null)
             {
                 return NotFound($"找不到 ID 為 {id} 的使用者");
             }
 
-            var oldUsername = user.Username;
+            var oldUsername = user.UserName;
 
             if (!string.IsNullOrEmpty(userUpdateDto.Username))
             {
-                user.Username = userUpdateDto.Username;
+                user.UserName = userUpdateDto.Username;
             }
 
             if (!string.IsNullOrEmpty(userUpdateDto.Password))
             {
-                user.PasswordHash = HashPassword(userUpdateDto.Password);
+                await _userManager.RemovePasswordAsync(user);
+                await _userManager.AddPasswordAsync(user, userUpdateDto.Password);
             }
 
-            _context.Entry(user).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-                await LogAction(id, $"使用者 '{oldUsername}' (ID: {id}) 的資料已被更新。新使用者名稱: '{user.Username}'");
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!_context.Users.Any(e => e.Id == id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
+            var adminUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            _auditService.LogAction(Convert.ToInt32(adminUserId), $"使用者 '{oldUsername}' (ID: {id}) 的資料已被更新");
             return NoContent();
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteUser(int id)
         {
-            var user = await _context.Users.FindAsync(id);
+            var user = await _userManager.FindByIdAsync(id.ToString());
             if (user == null)
             {
                 return NotFound($"找不到 ID 為 {id} 的使用者");
             }
 
-            var deletedUsername = user.Username;
+            var deletedUsername = user.UserName;
 
-            _context.Users.Remove(user);
-            await _context.SaveChangesAsync();
-
-            await LogAction(0, $"使用者 '{deletedUsername}' (ID: {id}) 已被刪除");
-
-            return NoContent();
-        }
-
-        private string HashPassword(string password)
-        {
-            using (var sha256 = SHA256.Create())
+            var result = await _userManager.DeleteAsync(user);
+            if (result.Succeeded)
             {
-                var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-                return BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
+                var adminUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                _auditService.LogAction(Convert.ToInt32(adminUserId), $"使用者 '{deletedUsername}' (ID: {id}) 已被刪除");
+                return NoContent();
             }
+
+            return BadRequest(result.Errors);
         }
 
-        private async Task LogAction(int userId, string action)
+        [HttpPost("{id}/assign-role")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> AssignRoleToUser(int id, [FromBody] RoleDto roleDto)
         {
-            var auditLog = new AuditLog
+            var user = await _userManager.FindByIdAsync(id.ToString());
+            if (user == null)
             {
-                UserId = userId,
-                Action = action,
-                Timestamp = DateTime.UtcNow
-            };
-            _context.AuditLogs.Add(auditLog);
-            await _context.SaveChangesAsync();
+                return NotFound(new { Message = $"找不到 ID 為 {id} 的使用者" });
+            }
+
+            var roleExists = await _roleManager.RoleExistsAsync(roleDto.RoleName);
+            if (!roleExists)
+            {
+                return BadRequest(new { Message = $"角色 '{roleDto.RoleName}' 不存在" });
+            }
+
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                var result = await _userManager.AddToRoleAsync(user, roleDto.RoleName);
+
+                if (!result.Succeeded)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(result.Errors);
+                }
+
+                var adminUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                _auditService.LogAction(Convert.ToInt32(adminUserId), $"使用者 '{user.UserName}' (ID: {id}) 已被指派 '{roleDto.RoleName}' 角色");
+
+                await _auditService.Context.SaveChangesAsync(); 
+                await transaction.CommitAsync();
+                return Ok(new { Message = $"已成功將 '{roleDto.RoleName}' 角色指派給 '{user.UserName}'" });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, new { Message = "儲存稽核日誌時發生錯誤", Error = ex.Message });
+            }
         }
     }
 

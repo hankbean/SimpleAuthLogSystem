@@ -5,6 +5,14 @@
 }
 
 <h1>@ViewData["Title"]</h1>
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success">@TempData["SuccessMessage"]</div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger">@TempData["ErrorMessage"]</div>
+}
 
 <div class="row">
     <div class="col-md-4">
@@ -15,6 +23,8 @@
                 <div class="form-floating mb-3">
                     <input asp-for="NewRole.RoleName" class="form-control" />
                     <label asp-for="NewRole.RoleName">角色名稱</label>
+
+                    <span asp-validation-for="NewRole.RoleName" class="text-danger"></span>
                 </div>
                 <button type="submit" class="w-100 btn btn-lg btn-success">新增角色</button>
             </form>
@@ -35,10 +45,10 @@
                 {
                     <tr>
                         <td>@role.Id</td>
-                        <td>@role.RoleName</td>
+                        <td>@role.Name</td>
                         <td>
                             <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editRoleModal"
-                                    data-roleid="@role.Id" data-rolename="@role.RoleName">
+                                    data-roleid="@role.Id" data-rolename="@role.Name">
                                 編輯
                             </button>
                             <form method="post" asp-page-handler="Delete" asp-route-id="@role.Id" style="display:inline;" onsubmit="return confirm('您確定要刪除這個角色嗎？');">
